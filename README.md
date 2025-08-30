@@ -1,4 +1,4 @@
-# AQA Text Compression NEA
+# AQA A-level Comp Sci Text Compression NEA
 Text compression project using Huffman Coding and Dictionary Data Compression
 This scored 63/75 
 
