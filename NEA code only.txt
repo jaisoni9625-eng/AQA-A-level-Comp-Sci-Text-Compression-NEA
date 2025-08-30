@@ -1,0 +1,1067 @@
+       Imports System.ComponentModel.Design
+Imports System.IO
+Imports System.Net
+Imports System.Net.Security
+Imports System.Runtime.InteropServices
+Imports System.Text
+Imports System.Xml
+
+Module Program
+    'C:\CourseworkTesting/
+    'C:\NEA/Testing.txt
+    Structure characters
+        Dim CharacterFrequency As Integer 'the frequency of the character
+        Dim Character As String
+        Dim CodeProduced As Boolean 'determines whether the code has been displayed or not
+    End Structure
+    Structure Node
+        Dim LP As Integer 'Left Pointer (child node with the smaller total)
+        Dim RP As Integer 'Right Pointer (child node with the larger total)
+        Dim total As Integer 'Sum of leaf nodes // the value which the parent node will contain
+        Dim IsProcessed As Boolean 'Checks to see if the node has already been viewed in the tree during construction 
+        Dim character As String
+        Dim BinaryCode As String 'The binary code which is produced to the screen
+        Dim CharacterProduced As Boolean
+    End Structure
+    Sub Main(args As String())
+        Dim DictionaryDoneOnce As Boolean = False 'just to prevent the dictionary being built multiple times
+        Dim Filehandler As New FileHandling
+        Dim choice As String = ""
+        Console.WriteLine("Welcome")
+        Console.WriteLine("To access the menu type the number of the task you want to complete and then press enter")
+        Console.WriteLine("All Files must have a valid file path otherwise you will be instructed to input another one")
+        Console.WriteLine("Text files will end in .txt whereas binary files will not")
+        Console.WriteLine()
+        Console.WriteLine()
+        Do
+            Dim lines As New List(Of String)
+            Dim huffman As New HuffmanCoding
+            Dim Dictionary As New DictionaryDataCompression
+            Dim Statistics As New Statistics
+            Dim statistical As Boolean = False 'prevents the UI being presented when using statistics
+            choice = ""
+            While choice <> "1" And choice <> "2" And choice <> "3" And choice <> "4"
+                'displays all of the valid options and requests the user for an input
+                Console.WriteLine("1:Huffman Coding Menu")
+                Console.WriteLine("2:Dictionary Data Compression Menu")
+                Console.WriteLine("3:Statistics")
+                Console.WriteLine("4:Exit")
+                choice = Console.ReadLine
+                Console.WriteLine()
+                Console.WriteLine()
+            End While
+            If choice <> "4" Then 'if they have not exited the menu then require the user to input a filepath
+                Dim filename As String = ""
+                Do
+                    Console.WriteLine("Input filepath")
+                    filename = Console.ReadLine
+                    If Not (choice = "1") Then
+                        'ensures that for dictionary data compression and the statistics page that a valid text file path is inputted and not a binary file
+                        While Filehandler.DetermineTextFile(filename) = False
+                            Console.WriteLine("Input filepath")
+                            filename = Console.ReadLine
+                        End While
+                    Else
+                        'checks to see if a binary file is a valid file path 
+                        Dim ValidHuffman As Boolean = False
+                        Do
+                            Try
+                                FileOpen(1, filename, OpenMode.Binary.Input)
+                                FileClose(1)
+                                ValidHuffman = True
+                            Catch ex As Exception
+                                Console.WriteLine("Input filepath")
+                                filename = Console.ReadLine
+                            End Try
+                        Loop Until ValidHuffman = True
+                    End If
+                    'requests for userinput until a valid file path is inputted
+                Loop Until Filehandler.LoadingText(filename, lines) = True And filename.Length > 4
+                Console.WriteLine()
+                If lines.Count > 0 Then 'checks to see if the file is empty
+                    'if the file is not empty then for the appropriate option the user will be directed to that user interface
+                    If choice = "1" Then
+                        huffman.HuffmanCodingUserInterface(huffman, lines, filename)
+                    ElseIf choice = "2" Then
+                        Dictionary.DictionaryDataCompressionUserInterface(Dictionary, DictionaryDoneOnce, lines, filename)
+                        DictionaryDoneOnce = False
+                    ElseIf choice = "3" Then
+                        Statistics.StatisticsUI(huffman, Dictionary, filename, lines)
+                    End If
+                Else
+                    Console.WriteLine("Empty file")
+                    Console.WriteLine()
+                End If
+            End If
+        Loop Until choice = "4"
+        Console.WriteLine("Bye")
+    End Sub
+    Public Class FileHandling
+        Function DetermineTextFile(ByRef filename As String) As Boolean
+            Dim ValidTxt As String = ".txt"
+            If filename.Length <= 4 Then 'if the filename has an invalid length
+                Console.WriteLine("Input file path")
+                filename = Console.ReadLine()
+                Return DetermineTextFile(filename)
+            Else
+                Dim Ans As String = ""
+                For x = filename.Length - 1 To 0 Step -1
+                    If Ans.Length <> 4 Then 'collects the last 4 characters from the text file to see if it .txt
+                        Ans = filename.Substring(x, 1) & Ans
+                    End If
+                Next
+                Return Ans = ValidTxt ' Return result directly
+            End If
+        End Function
+        Function LoadingText(filename As String, ByRef lines As List(Of String)) As Boolean
+            Try
+                FileOpen(1, filename, OpenMode.Input)
+                ' Read each line from the file and add it to the lines array
+                Dim line As String
+                Dim i As Integer = 0
+                Do While Not EOF(1)
+                    line = LineInput(1)
+                    'if a line is an empty string then just add a space instead
+                    If line = "" Then
+                        lines.Add(" ")
+                    Else
+                        lines.Add(line)
+                    End If
+                Loop
+                FileClose(1)
+            Catch ex As Exception
+                Return False
+            End Try
+            Return True
+        End Function
+        Sub CreateDirectoryAndFile(ByRef filepath As String, Huffman As Boolean)
+            If Huffman = True Then
+                While DetermineTextFile(filepath) = True
+                    Console.WriteLine("Input file path")
+                    filepath = Console.ReadLine
+                End While
+            ElseIf Huffman = False Then
+                While DetermineTextFile(filepath) = False
+                    Console.WriteLine("Input file path")
+                    filepath = Console.ReadLine
+                End While
+            End If
+            Dim Direct As String = ""
+            Dim x As Integer = 0
+            While filepath.Substring(x, 1) <> "/"
+                Direct = Direct & filepath.Substring(x, 1)
+                x = x + 1
+            End While
+            'the directory that the user has inputted has been stored in the 'Direct' variable
+            If Directory.Exists(Direct) = False Then 'if the directory does not exist 
+                Directory.CreateDirectory(Direct)
+            End If
+            If File.Exists(filepath) = False Then
+                Using fs As FileStream = File.Create(filepath)
+                End Using
+            End If
+            Try
+                If DetermineTextFile(filepath) = False Then
+                    FileOpen(2, filepath, OpenMode.Binary)
+                Else
+                    FileOpen(2, filepath, OpenMode.Input)
+                End If
+                FileClose(2)
+            Catch ex As Exception
+                CreateDirectoryAndFile("", Huffman) 'if the file does not exist then recall the subroutine 
+            End Try
+        End Sub
+        Sub resavingToATextFile(textfilepath As String, originallines As List(Of String))
+            'allows the original lines formed from the decoded text into a text file
+            CreateDirectoryAndFile(textfilepath, False) 'if the directory is not present or the file isnt then create a new one
+            Console.WriteLine()
+            FileOpen(4, textfilepath, OpenMode.Output)
+            For h = 0 To originallines.Count - 1
+                PrintLine(4, originallines(h))
+            Next
+            FileClose(4)
+        End Sub
+    End Class
+    Public Class HuffmanCoding
+        Inherits FileHandling
+        Function partion(priorityqueue As List(Of Integer), LP As Integer, RP As Integer) As Integer
+            Dim pivot As Integer = priorityqueue(LP)
+            Dim i As Integer = LP - 1
+            Dim j As Integer = RP + 1
+            While i < j 'repeat this code until it reaches the pivot point
+                Do
+                    i = i + 1
+                Loop Until priorityqueue(i) >= pivot
+                Do
+                    j = j - 1
+                Loop Until priorityqueue(j) <= pivot
+                If i >= j Then
+                    Return j
+                Else
+                    'swaps the elements around
+                    Dim placeholder As Integer = priorityqueue(i)
+                    priorityqueue(i) = priorityqueue(j)
+                    priorityqueue(j) = placeholder
+                End If
+            End While
+            Return j
+        End Function
+        Sub quicksort(ByRef priorityqueue As List(Of Integer), LP As Integer, RP As Integer)
+            If LP < RP Then
+                Dim PartionIndex As Integer = partion(priorityqueue, LP, RP)
+                quicksort(priorityqueue, LP, PartionIndex)
+                quicksort(priorityqueue, PartionIndex + 1, RP)
+            End If
+        End Sub
+        Sub SetUpArrays(ByRef tree() As Node, ByRef unique() As characters, treesize As Integer, uniquesize As Integer)
+            tree(treesize) = New Node
+            unique(uniquesize) = New characters
+        End Sub
+        Public Sub CollectingUniqueCharacters(ByRef unique() As characters, ByRef uniqueSize As Integer, lines As List(Of String))
+            Dim found As Boolean 'variable to check if character exists or not
+            Dim character As String = ""
+            For i = 0 To lines.Count - 1 'looping through each line
+                For x = 0 To lines(i).Length - 1 'looping through each character
+                    character = lines(i).Substring(x, 1)
+                    found = False
+                    For k = 0 To uniqueSize - 1 'loops through the list of known characters
+                        If unique(k).Character = character Then
+                            unique(k).CharacterFrequency = unique(k).CharacterFrequency + 1 'if found increase the counter by 1
+                            found = True
+                        End If
+                    Next
+                    If found = False Then 'if the character has not been found
+                        'set up the new character
+                        unique(uniqueSize).Character = character
+                        unique(uniqueSize).CharacterFrequency = 1
+                        uniqueSize = uniqueSize + 1
+                    End If
+                Next
+            Next
+        End Sub
+        Public Sub SortingOutFrequency(unique() As characters, uniquesize As Integer, ByRef priorityqueue As List(Of Integer))
+            For x = 0 To uniquesize - 1
+                priorityqueue.Add(unique(x).CharacterFrequency)
+            Next
+            quicksort(priorityqueue, 0, priorityqueue.Count - 1)
+        End Sub
+        Public Sub CreatingRootNodes(priorityqueue As List(Of Integer), ByRef tree() As Node, ByRef treeSize As Integer)
+            'for all of the characters, they are rootnodes so the LP and RP are -1 and the total is their frequency
+            For i = 0 To priorityqueue.Count - 1
+                Dim newNode As New Node()
+                newNode.RP = -1
+                newNode.LP = -1
+                newNode.total = priorityqueue(i)
+                tree(treeSize) = newNode
+                treeSize = treeSize + 1 'increase the size of the array by one
+            Next
+        End Sub
+        Public Function RemoveHighestPriority(ByRef priorityqueue As List(Of Integer)) As Integer
+            quicksort(priorityqueue, 0, priorityqueue.Count - 1) 'sorts the list 
+            Dim minvalue As Integer = priorityqueue(0)
+            priorityqueue.RemoveAt(0)
+            'removes the smallest item in the priority queue
+            Return minvalue
+        End Function
+        Public Sub ResettingCodeProduced(ByRef unique() As characters, ByRef uniquesize As Integer, ByRef tree() As Node, ByRef treesize As Integer)
+            'basically without this, if you tried to display the huffman codes again, it would just display empty strings
+            For t = 0 To uniquesize - 1
+                unique(t).CodeProduced = False
+            Next
+            For i = 0 To treesize - 1
+                tree(i).CharacterProduced = False
+                tree(i).BinaryCode = ""
+            Next
+            treesize = 0
+            uniquesize = 0
+        End Sub
+        Public Sub FrequencyDistribution(unique() As characters, uniquesize As Integer)
+            For x = 0 To uniquesize - 1
+                Console.WriteLine(unique(x).Character & " " & unique(x).CharacterFrequency)
+            Next
+        End Sub
+        Public Sub HuffmanTree(ByRef priorityqueue As List(Of Integer), ByRef tree() As Node, ByRef treeSize As Integer)
+            Dim node1Freq As Integer = RemoveHighestPriority(priorityqueue) 'gets smallest element
+            Dim node2Freq As Integer = RemoveHighestPriority(priorityqueue) 'gets second smallest element
+            Dim node1Found As Boolean = False 'ensures that only two nodes are taken
+            Dim node2found As Boolean = False 'ensures that only two nodes are taken
+            Dim node1Index As Integer = -1
+            Dim node2Index As Integer = -1
+            For t = 0 To treeSize - 1
+                If tree(t).total = node1Freq And tree(t).IsProcessed = False And node1Found = False Then
+                    node1Index = t
+                    tree(t).IsProcessed = True 'makes sure that specific node is not looked at again
+                    node1Found = True
+                End If
+                If tree(t).total = node2Freq And tree(t).IsProcessed = False And node2found = False Then
+                    node2Index = t
+                    tree(t).IsProcessed = True 'makes sure that specific node is not looked at again
+                    node2found = True
+                End If
+            Next
+            'create a new node
+            Dim newNode As New Node()
+            'LP is the smaller node out of the two
+            newNode.LP = node1Index
+            newNode.RP = node2Index
+            'NewNode total is the sum of the two nodes
+            newNode.total = node1Freq + node2Freq
+            tree(treeSize) = newNode
+            treeSize = treeSize + 1 'increase the size of the tree by one
+            priorityqueue.Add(newNode.total) 'add the new node to the priority queue
+            If priorityqueue.Count <> 1 Then
+                HuffmanTree(priorityqueue, tree, treeSize)
+            End If
+        End Sub
+        Public Sub PreorderTraversalEncoding(nodeIndex As Integer, currentCode As String, ByRef tree() As Node, ByRef unique() As characters, uniqueSize As Integer, statistics As Boolean)
+            Dim NodeFound As Boolean = False 'ensures that only one character is being produced as characters with same frequency would also be outputted
+            If tree(nodeIndex).LP = -1 And tree(nodeIndex).RP = -1 Then
+                For x = 0 To uniqueSize - 1
+                    If unique(x).CharacterFrequency = tree(nodeIndex).total And unique(x).CodeProduced = False And NodeFound = False Then
+                        'if it is a chharacter then output it
+                        unique(x).CodeProduced = True 'prevents a characters binary code being produced multiple times
+                        tree(nodeIndex).character = unique(x).Character
+                        tree(nodeIndex).BinaryCode = currentCode
+                        NodeFound = True
+                        If statistics = False Then
+                            'when this code is running through the statistics, the binary codes do not need to be displayed
+                            Console.WriteLine(unique(x).Character & " : Binary code = " & currentCode)
+                        End If
+                    End If
+                Next
+            Else
+                If tree(nodeIndex).LP <> -1 Then
+                    'Traverse the left node
+                    PreorderTraversalEncoding(tree(nodeIndex).LP, currentCode & "0", tree, unique, uniqueSize, statistics)
+                End If
+                If tree(nodeIndex).RP <> -1 Then
+                    'Traverse the right node
+                    PreorderTraversalEncoding(tree(nodeIndex).RP, currentCode & "1", tree, unique, uniqueSize, statistics)
+                End If
+            End If
+        End Sub
+        Sub PreorderTraversalDecoding(nodeIndex As Integer, currentCode As String, ByRef tree() As Node, ByRef EachLineInBinary As List(Of String), ByRef binaryline As List(Of String), ByRef OriginalLines As List(Of String), ByRef fullline As String)
+            If tree(nodeIndex).LP = -1 And tree(nodeIndex).RP = -1 Then
+                If binaryline.Count <> 0 And EachLineInBinary.Count <> 0 Then
+                    Dim PlaceholderCode As String = "" 'remove n characters from binaryline
+                    If binaryline.Count >= currentCode.Length Then 'makes sure that the length is valid
+                        For u = 0 To currentCode.Length - 1
+                            PlaceholderCode = PlaceholderCode & binaryline(u)
+                        Next
+                    End If
+                    If PlaceholderCode = currentCode And currentCode <> "" Then 'if they are equal to each other
+                        fullline = fullline & tree(nodeIndex).character 'As the two codes are equal append the character equivilant to the output line
+                        'if A = 01 and the currentcode and the placeholder code is equal to 01 then the character A would be added to the fullline
+                        For i = 0 To currentCode.Length - 1
+                            binaryline.RemoveAt(0) 'remove the character from the line
+                        Next
+                        If binaryline.Count = 0 Then
+                            EachLineInBinary.RemoveAt(0)
+                            OriginalLines.Add(fullline)
+                            'fullline is a line from the decoded text.
+                            Console.WriteLine(fullline) 'outputs the line
+                            fullline = ""
+                        End If
+                    End If
+                    currentCode = "" 'reset the code
+                End If
+            Else
+                If tree(nodeIndex).LP <> -1 Then
+                    'Traverse the left node
+                    PreorderTraversalDecoding(tree(nodeIndex).LP, currentCode & "0", tree, EachLineInBinary, binaryline, OriginalLines, fullline)
+                End If
+                If tree(nodeIndex).RP <> -1 Then
+                    'Traverse the right node
+                    PreorderTraversalDecoding(tree(nodeIndex).RP, currentCode & "1", tree, EachLineInBinary, binaryline, OriginalLines, fullline)
+                End If
+            End If
+        End Sub
+        Public Sub ConvertFromBinaryToText(ByRef EachLineInBinary As List(Of String), ByRef tree() As Node, treeSize As Integer, binaryline As List(Of String), ByRef OriginalLines As List(Of String), fullline As String)
+            While EachLineInBinary.Count > 0
+                For h = 0 To EachLineInBinary(0).Length - 1
+                    binaryline.Add(EachLineInBinary(0).Substring(h, 1)) 'adding each binary bit to an array
+                    'each bit in the binary line will have its own index in the array
+                Next
+                While EachLineInBinary.Count > 0 AndAlso binaryline.Count > 0 'while there are still lines which need to be converted back into text
+                    PreorderTraversalDecoding(treeSize - 1, "", tree, EachLineInBinary, binaryline, OriginalLines, fullline)
+                End While
+            End While
+        End Sub
+        Public Sub RetrieveBinaryLines(filename As String, ByRef eachlineinbinary As List(Of String), ByRef eachlineinbinarylength As List(Of Integer))
+            Dim totallength As Integer = 0
+            For y = 0 To eachlineinbinarylength.Count - 1 'sum of all total bits
+                totallength = totallength + eachlineinbinarylength(y)
+            Next
+            If eachlineinbinary.Count = 0 Then ' Adds an empty string to the eachlineinbinary array
+                eachlineinbinary.Add("")
+            End If
+            Dim finalStringBuilder As New StringBuilder()
+            Using fileStreaming As New FileStream(filename, FileMode.Open, FileAccess.Read) ' Open the binary file
+                Using reader As New BinaryReader(fileStreaming)
+                    Dim fileLength As Long = fileStreaming.Length
+                    For x = 0 To fileLength - 1
+                        Dim byteStore As Byte = reader.ReadByte()
+                        Dim binaryCode As String = Convert.ToString(byteStore, 2)
+                        If x < fileLength - 1 Then
+                            While binaryCode.Length <> 8 'ensures it is an 8 bit binary code
+                                binaryCode = "0" & binaryCode
+                            End While
+                            finalStringBuilder.Append(binaryCode)
+                        Else
+                            ' For the last byte, ensure the length matches the total length
+                            While finalStringBuilder.Length + binaryCode.Length <> totallength And binaryCode.Length <> 8
+                                binaryCode = "0" & binaryCode
+                            End While
+                            finalStringBuilder.Append(binaryCode) ' Add to StringBuilder
+                        End If
+                    Next
+                End Using
+            End Using
+            Dim finalString As String = finalStringBuilder.ToString() ' Convert StringBuilder to string
+            Dim nextBit As Integer = 0 ' Bit of binary code being read
+            While eachlineinbinarylength.Count > 0
+                If eachlineinbinarylength(0) = finalString.Length Then ' Just add the entire thing if the lengths are equal (There is only a single line of text)
+                    eachlineinbinary(eachlineinbinary.Count - 1) = eachlineinbinary(eachlineinbinary.Count - 1) & finalString
+                ElseIf eachlineinbinarylength(0) < finalString.Length Then ' Looping until the line ends
+                    Dim placeholder As New StringBuilder() ' Used to store the line
+                    For h = 0 To eachlineinbinarylength(0) - 1
+                        placeholder.Append(finalString.Substring(nextBit + h, 1)) ' Adds the bit to the placeholder
+                    Next
+                    nextBit = nextBit + eachlineinbinarylength(0) ' Update the next bit to be read
+                    eachlineinbinary(eachlineinbinary.Count - 1) = eachlineinbinary(eachlineinbinary.Count - 1) & placeholder.ToString()
+                End If
+                eachlineinbinary.Add("")
+                eachlineinbinarylength.RemoveAt(0) ' Remove the line length from the array
+            End While
+            eachlineinbinary.RemoveAt(eachlineinbinary.Count - 1) ' Remove the last item in the array which is an empty string
+        End Sub
+        Public Sub ConvertAllTextToBinary(lines As List(Of String), tree() As Node, treeSize As Integer, ByRef EachLineInBinary As List(Of String), statistics As Boolean)
+            If EachLineInBinary.Count = 0 Then 'as the arraylist is empty, add an empty string
+                EachLineInBinary.Add("")
+            End If
+            For x = 0 To lines.Count - 1 'looping through each line
+                For i = 0 To lines(x).Length - 1 'looping through each character
+                    For h = 0 To treeSize - 1 'looping through the tree
+                        If tree(h).character = lines(x).Substring(i, 1) Then 'if the tree character matches the character in the line
+                            'add the binary equivalent to the eachlineinbinary array
+                            EachLineInBinary(EachLineInBinary.Count - 1) = EachLineInBinary(EachLineInBinary.Count - 1) & tree(h).BinaryCode
+                        End If
+                    Next
+                Next
+                EachLineInBinary.Add("")
+            Next
+            EachLineInBinary.RemoveAt(EachLineInBinary.Count - 1) 'removes the final empty string
+            If statistics = False Then
+                For a = 0 To EachLineInBinary.Count - 1
+                    Console.WriteLine(EachLineInBinary(a))
+                Next
+                Console.WriteLine()
+            End If
+        End Sub
+        Public Function SplitIntoBytes(ByRef EachLineInBinary As List(Of String), tree() As Node, treesize As Integer, statistics As Boolean) As Integer
+            Dim BinaryBytes As New List(Of String)
+            BinaryBytes.Add("") ' Start with an empty string to collect bits
+            For x = 0 To EachLineInBinary.Count - 1 ' Loop through each encoded line
+                For a = 0 To EachLineInBinary(x).Length - 1 ' Loop through each bit in the line
+                    If BinaryBytes(BinaryBytes.Count - 1).Length = 8 Then ' If we have 8 bits, create a new string
+                        BinaryBytes.Add("")
+                    End If
+                    BinaryBytes(BinaryBytes.Count - 1) = BinaryBytes(BinaryBytes.Count - 1) & EachLineInBinary(x).Substring(a, 1) ' Append bit to the current byte
+                Next
+            Next
+            If statistics = False Then
+                WritingToBinaryFile(BinaryBytes, treesize, tree, EachLineInBinary)
+            End If
+            'if the code is running through the huffman coding UI Then get user to input file
+            Return BinaryBytes.Count - 1 'return the number of bytes. This is required in the statistics class
+        End Function
+        Public Sub WritingToBinaryFile(binarybytes As List(Of String), treesize As Integer, tree() As Node, eachlineinbinary As List(Of String))
+            Console.WriteLine()
+            Console.WriteLine("Input filepath of binary file:")
+            Dim filepath As String = Console.ReadLine
+            While DetermineTextFile(filepath) = True Or filepath.Length <= 4
+                Console.WriteLine("Input filepath of binary file:")
+                filepath = Console.ReadLine
+            End While
+            CreateDirectoryAndFile(filepath, True)
+            Using fs As New FileStream(filepath, FileMode.Create)
+                Using writer As New BinaryWriter(fs)
+                    For i = 0 To binarybytes.Count - 1
+                        Dim ByteString As String = binarybytes(i)
+                        ' Only write complete bytes
+                        Dim byteValue As Byte = Convert.ToByte(ByteString, 2) ' Convert binary string to byte
+                        writer.Write(byteValue) ' Write the byte to the file
+                    Next
+                End Using
+            End Using
+            SaveHuffmanTree(treesize, tree, eachlineinbinary, filepath)
+        End Sub
+        Public Sub SaveHuffmanTree(treesize As Integer, tree() As Node, eachlineinbinary As List(Of String), filename As String)
+            CreateDirectoryAndFile("C:\CourseworkTesting/TreeSave.txt", False)
+            FileOpen(5, "C:\CourseworkTesting/TreeSave.txt", OpenMode.Output)
+            PrintLine(5, filename) 'for when it is opened
+            'adds the length of eachlineinbinary to the file
+            For h = 0 To eachlineinbinary.Count - 1
+                PrintLine(5, eachlineinbinary(h).Length)
+            Next
+            PrintLine(5, " ")
+            For x = 0 To treesize - 1
+                'sends the current state of the tree into a text file
+                PrintLine(5, tree(x).LP)
+                PrintLine(5, tree(x).RP)
+                PrintLine(5, tree(x).total)
+                PrintLine(5, tree(x).BinaryCode)
+                PrintLine(5, tree(x).IsProcessed)
+                PrintLine(5, tree(x).character)
+                PrintLine(5, tree(x).CharacterProduced)
+            Next
+            FileClose(5)
+        End Sub
+        Public Function RetrieveHuffmanTree(ByRef treesize As Integer, ByRef tree() As Node, ByRef eachlineinbinary As List(Of String), ByRef filename As String, ByRef eachlineinbinarylength As List(Of Integer)) As Boolean
+            FileOpen(5, "C:\CourseworkTesting/TreeSave.txt", OpenMode.Input)
+            Dim TextFileName As String = ""
+            If Not EOF(5) Then
+                TextFileName = LineInput(5)
+            End If
+            If filename = TextFileName And DetermineTextFile(TextFileName) = False Then 'if the filepath matches the file path in the text file and is a binary file
+                Dim linelength As String = ""
+                If Not EOF(5) Then
+                    Do
+                        linelength = LineInput(5)
+                        If linelength <> "" And linelength <> " " Then 'if the line is not empty then it will be a number
+                            eachlineinbinarylength.Add(CInt(linelength)) 'add the linelength to list
+                        End If
+                    Loop Until linelength = " " Or EOF(5)
+                    'loops until all eachlineinbinarylength is retreived or file ends
+                End If
+                While Not EOF(5) 'retrieves each part of the tree
+                    tree(treesize).LP = LineInput(5)
+                    tree(treesize).RP = LineInput(5)
+                    tree(treesize).total = LineInput(5)
+                    tree(treesize).BinaryCode = LineInput(5)
+                    tree(treesize).IsProcessed = LineInput(5)
+                    tree(treesize).character = LineInput(5)
+                    tree(treesize).CharacterProduced = LineInput(5)
+                    treesize = treesize + 1
+                End While
+                filename = ""
+                filename = TextFileName
+                FileClose(5)
+                Return True
+            Else
+                Console.WriteLine("Invalid file path")
+                'if they have not inputted the same filepath as the one in the text file
+                'the user will be returned to the main menu
+                FileClose(5)
+                Return False
+            End If
+        End Function
+        Public Sub ResetDecoding(ByRef eachlineinbinary As List(Of String), ByRef eachlineinbinarylength As List(Of Integer), ByRef treesize As Integer)
+            eachlineinbinary.Clear()
+            eachlineinbinarylength.Clear()
+            treesize = 0
+        End Sub
+        Public Sub HuffmanCodingUserInterface(huffman As HuffmanCoding, ByRef lines As List(Of String), filename As String)
+            Dim tree(1000) As Node
+            Dim unique(1000) As characters
+            Dim treeSize As Integer = 0 'size of the tree
+            Dim uniqueSize As Integer = 0 'Number of unique characters
+            Dim priorityQueue As New List(Of Integer)
+            Dim EachLineInBinary As New List(Of String) 'each line in binary
+            Dim BinaryLine As New List(Of String)
+            Dim eachlineinbinarylength As New List(Of Integer)
+            Dim choice As String = ""
+            Dim ExitHuffman As Boolean = False 'used to exit the program if the file is not a text file
+            Dim Statistics As Boolean = False
+            Dim OriginalLines As New List(Of String)
+            Do
+                choice = ""
+                If DetermineTextFile(filename) = True Then 'if it is a valid filepath for a text file
+                    While choice <> "1" And choice <> "2" And choice <> "3"
+                        'loops until user inputs 1,2 or 3
+                        Console.WriteLine("1:View the key")
+                        Console.WriteLine("2:View Character Frequency Distribition")
+                        Console.WriteLine("3:Return to main menu")
+                        choice = Console.ReadLine
+                        Console.WriteLine()
+                    End While
+                    SetUpArrays(tree, unique, treeSize, uniqueSize)
+                    ResettingCodeProduced(unique, uniqueSize, tree, treeSize)
+                    CollectingUniqueCharacters(unique, uniqueSize, lines)
+                    SortingOutFrequency(unique, uniqueSize, priorityQueue)
+                    CreatingRootNodes(priorityQueue, tree, treeSize)
+                    'if there is only a single character in the text
+                    If priorityQueue.Count = 1 Then
+                        tree(0).BinaryCode = "0"
+                        tree(0).character = unique(0).Character
+                        tree(0).total = unique(0).CharacterFrequency
+                        tree(0).LP = -1
+                        tree(0).RP = -1
+                    Else
+                        'As the tree needs more than one item in the priority queue construct the tree using the huffmantree subroutine
+                        HuffmanTree(priorityQueue, tree, treeSize)
+                    End If
+                    Console.WriteLine()
+                    If choice = "1" Then
+                        Dim nodeindex As Integer = treeSize - 1
+                        Dim currentcode As String = ""
+                        'traverses the tree
+                        PreorderTraversalEncoding(nodeindex, currentcode, tree, unique, uniqueSize, Statistics)
+                        Dim returnback As String = ""
+                        Console.WriteLine()
+                        While returnback <> "1" And returnback <> "2"
+                            Console.WriteLine("1:Compress text and save to binary file")
+                            Console.WriteLine("2:Return to Huffman Coding Menu")
+                            returnback = Console.ReadLine
+                            Console.WriteLine()
+                        End While
+                        If returnback = "1" Then
+                            ConvertAllTextToBinary(lines, tree, treeSize, EachLineInBinary, Statistics)
+                            SplitIntoBytes(EachLineInBinary, tree, treeSize, Statistics)
+                            ExitHuffman = True
+                            Console.WriteLine()
+                        End If
+                        ResettingCodeProduced(unique, uniqueSize, tree, treeSize)
+                    ElseIf choice = "2" Then
+                        FrequencyDistribution(unique, uniqueSize)
+                    End If
+                Else
+                    Dim DecodeOption As String = ""
+                    While DecodeOption <> "1" And DecodeOption <> "2"
+                        'loops until user inputs 1 or 2
+                        Console.WriteLine("1:Decode binary file")
+                        Console.WriteLine("2:Exit")
+                        DecodeOption = Console.ReadLine
+                    End While
+                    If DecodeOption = "1" Then
+                        If RetrieveHuffmanTree(treeSize, tree, EachLineInBinary, filename, eachlineinbinarylength) = True Then
+                            RetrieveBinaryLines(filename, EachLineInBinary, eachlineinbinarylength) 'retrives all of the binary lines
+                            ConvertFromBinaryToText(EachLineInBinary, tree, treeSize, BinaryLine, OriginalLines, "")
+                            Console.WriteLine()
+                            Dim SaveToFile As String = ""
+                            While SaveToFile <> "1" And SaveToFile <> "2"
+                                Console.WriteLine("1:Save to text file")
+                                Console.WriteLine("2:Exit")
+                                SaveToFile = Console.ReadLine
+                            End While
+                            If SaveToFile = "1" Then
+                                resavingToATextFile("", OriginalLines)
+                            End If
+                        End If
+                    End If
+                    ExitHuffman = True
+                End If
+                ResetDecoding(EachLineInBinary, eachlineinbinarylength, treeSize)
+                Console.WriteLine()
+            Loop Until choice = "3" Or ExitHuffman = True
+        End Sub
+    End Class
+    Public Class Statistics
+        Public Function CalculatingTreeSize(tree() As Node, treesize As Integer, eachlineinbinary As List(Of String)) As Integer
+            Dim ByteCount As Integer = 0
+            For x = 0 To treesize - 1
+                ByteCount = ByteCount + ((tree(x).LP).ToString).Length
+                ByteCount = ByteCount + ((tree(x).RP).ToString).Length
+                If tree(x).BinaryCode <> "" Then
+                    ByteCount = ByteCount + (tree(x).BinaryCode).Length
+                Else
+                    ByteCount = ByteCount + 1
+                End If
+                If tree(x).character <> "" Then
+                    ByteCount = ByteCount + (tree(x).character).Length
+                Else
+                    ByteCount = ByteCount + 1
+                End If
+                ByteCount = ByteCount + ((tree(x).total).ToString).Length
+                ByteCount = ByteCount + ((tree(x).CharacterProduced).ToString).Length
+                ByteCount = ByteCount + ((tree(x).IsProcessed).ToString).Length
+            Next
+            For a = 0 To eachlineinbinary.Count - 1
+                Dim Linelength As String = eachlineinbinary(a).Length
+                ByteCount = ByteCount + (Linelength.Length * 4)
+            Next
+            Return ByteCount
+        End Function
+        Public Sub StatisticsUI(Huffman As HuffmanCoding, Dictionary As DictionaryDataCompression, OriginalFilePath As String, lines As List(Of String))
+            Dim choice As String = ""
+            While choice <> "1" And choice <> "2"
+                'ensures a valid choice is entered
+                Console.WriteLine("1:Continue")
+                Console.WriteLine("2:Exit")
+                choice = Console.ReadLine
+            End While
+            If choice = "1" Then
+                AllSubroutines(Huffman, Dictionary, OriginalFilePath, lines)
+            End If
+        End Sub
+        Public Sub AllSubroutines(Huffman As HuffmanCoding, Dictionary As DictionaryDataCompression, OriginalFilePath As String, ByRef lines As List(Of String))
+            'General variables used
+            Dim stopwatch As New Stopwatch
+            Dim originalfile As New FileInfo(OriginalFilePath)
+            Dim originalfilepathsize As Long = originalfile.Length
+            Console.WriteLine("Original file path size " & originalfilepathsize)
+            'Variables/Functions/Subroutines for Huffman coding
+            Dim tree(1000) As Node
+            Dim unique(1000) As characters
+            Dim treeSize As Integer = 0
+            Dim uniqueSize As Integer = 0
+            Dim priorityQueue As New List(Of Integer)
+            Dim EachLineInBinary As New List(Of String)
+            Dim BinaryLine As New List(Of String)
+            Dim DecodeBoolean As Boolean = False
+            Dim eachlineinbinarylength As New List(Of Integer)
+            Dim DoneOnce As Boolean = False
+            Dim stats As Boolean = True
+            Dim originalLines As New List(Of String)
+            stopwatch.Start()
+            Huffman.SetUpArrays(tree, unique, treeSize, uniqueSize)
+            Huffman.ResettingCodeProduced(unique, uniqueSize, tree, treeSize)
+            Huffman.CollectingUniqueCharacters(unique, uniqueSize, lines)
+            Huffman.SortingOutFrequency(unique, uniqueSize, priorityQueue)
+            Huffman.CreatingRootNodes(priorityQueue, tree, treeSize)
+            While priorityQueue.Count > 1
+                Huffman.HuffmanTree(priorityQueue, tree, treeSize)
+            End While
+            'starts from the top of the tree
+            Huffman.PreorderTraversalEncoding(treeSize - 1, "", tree, unique, uniqueSize, stats)
+            Huffman.ConvertAllTextToBinary(lines, tree, treeSize, EachLineInBinary, stats)
+            Dim HuffmanSizeInbytes As Integer = Huffman.SplitIntoBytes(EachLineInBinary, tree, treeSize, stats)
+            Dim TreeSizeInBytes As Integer = CalculatingTreeSize(tree, treeSize, EachLineInBinary)
+            Console.WriteLine("Huffman file size in bytes " & (HuffmanSizeInbytes + TreeSizeInBytes))
+            stopwatch.Stop()
+            Console.WriteLine(stopwatch.Elapsed)
+            stopwatch.Restart()
+            'Variables/Functions/Subroutines for Dictionary Data Compression
+            Dim WordBank As New List(Of String)
+            Dim WordFrequencies As New List(Of Integer)
+            Dim encodedlines As New List(Of String)
+            Dictionary.GettingAllNewUniqueWords(WordBank, WordFrequencies, lines)
+            Dictionary.CompressText(encodedlines, lines, WordBank, WordFrequencies)
+            Dim DictionarySizeInBytes As Integer = Dictionary.NumberOfBytes(encodedlines)
+            Dim KeySizeInBytes As Integer = Dictionary.NumberOfBytes(WordBank)
+            KeySizeInBytes = KeySizeInBytes + (OriginalFilePath.Length)
+            DictionarySizeInBytes = DictionarySizeInBytes + KeySizeInBytes
+            Console.WriteLine("Dictionary Data Compression File Size in bytes " & DictionarySizeInBytes)
+            stopwatch.Stop()
+            Console.WriteLine(stopwatch.Elapsed)
+            percentages(DictionarySizeInBytes, originalfilepathsize, HuffmanSizeInbytes, TreeSizeInBytes)
+        End Sub
+        Public Sub percentages(DictionarySizeInBytes As Integer, OriginalFilePathsize As Long, HuffmanSizeInBytes As Integer, treesizeinbytes As Integer)
+            Console.WriteLine()
+            Dim DictionaryPercent As Double = (1 - (DictionarySizeInBytes / (CInt(OriginalFilePathsize)))) * 100
+            Dim HuffmanPercent As Double = (1 - ((HuffmanSizeInBytes + (treesizeinbytes)) / OriginalFilePathsize)) * 100
+            Console.WriteLine("Huffman percentage reducton " & HuffmanPercent)
+            Console.WriteLine("Dictionary percentage reduction " & DictionaryPercent)
+            Console.WriteLine()
+        End Sub
+    End Class
+    Public Class DictionaryDataCompression
+        Inherits FileHandling
+        Function partion(ByRef WordFrequencies As List(Of Integer), LP As Integer, RP As Integer, ByRef wordbank As List(Of String)) As Integer
+            Dim pivot As Integer = WordFrequencies(LP)
+            Dim i As Integer = LP - 1
+            Dim j As Integer = RP + 1
+            While i < j 'repeat this code until it reaches the pivot point
+                Do
+                    i = i + 1
+                Loop Until WordFrequencies(i) <= pivot
+                Do
+                    j = j - 1
+                Loop Until WordFrequencies(j) >= pivot
+                If i >= j Then
+                    Return j
+                Else
+                    'swaps items around
+                    Dim placeholder As Integer = WordFrequencies(i)
+                    WordFrequencies(i) = WordFrequencies(j)
+                    WordFrequencies(j) = placeholder
+                    Dim wordholder As String = wordbank(i)
+                    wordbank(i) = wordbank(j)
+                    wordbank(j) = wordholder
+                End If
+            End While
+            Return j
+        End Function
+        Public Sub quicksort(ByRef WordFrequencies As List(Of Integer), LP As Integer, RP As Integer, ByRef wordbank As List(Of String))
+            If LP < RP Then
+                Dim PartionIndex As Integer = partion(WordFrequencies, LP, RP, wordbank)
+                quicksort(WordFrequencies, LP, PartionIndex, wordbank)
+                quicksort(WordFrequencies, PartionIndex + 1, RP, wordbank)
+            End If
+        End Sub
+        Public Sub GettingAllNewUniqueWords(ByRef wordbank As List(Of String), ByRef wordfrequencies As List(Of Integer), lines As List(Of String))
+            Dim word As String = ""
+            Dim PreviouslyStoredWord As Boolean = False 'checks to see if the word has already been stored in the wordbank
+            Dim PreviouslyStoredCharacter As Boolean = False 'checks to see if the character has already been added in the wordbank
+            For i = 0 To lines.Count - 1 'looping each line
+                For x = 0 To lines(i).Length - 1 'looping for each word in each line
+                    If Char.IsLetterOrDigit(lines(i).Substring(x, 1)) Then
+                        word = word & lines(i).Substring(x, 1)
+                    ElseIf x < lines(i).Length - 2 And (lines(i).Substring(x, 1) = "-" Or lines(i).Substring(x, 1) = "—") Then
+                        If Char.IsLetter(lines(i).Substring(x + 1, 1)) Then 'ensures that a letter is the next character in the string
+                            word = word & lines(i).Substring(x, 1)
+                        End If
+                    ElseIf lines(i).Substring(x, 1) = "'" Or lines(i).Substring(x, 1) = "’" Then
+                        word = word & lines(i).Substring(x, 1)
+                    Else
+                        PreviouslyStoredWord = False
+                        CheckingWordExists(PreviouslyStoredWord, wordbank, wordfrequencies, lines, word)
+                        CheckingWordExists(PreviouslyStoredWord, wordbank, wordfrequencies, lines, lines(i).Substring(x, 1))
+                        word = ""
+                    End If
+                Next
+                CheckingWordExists(PreviouslyStoredWord, wordbank, wordfrequencies, lines, word)
+                If i <> lines.Count - 1 Then 'if it is not the final line set word to ""
+                    word = ""
+                End If
+            Next
+        End Sub
+        Public Sub CompressText(ByRef EncodedLines As List(Of String), lines As List(Of String), wordbank As List(Of String), wordfreequencies As List(Of Integer))
+            Dim word As String = ""
+            Dim line As String = ""
+            Dim CurrentCharacter As String = ""
+            For i = 0 To lines.Count - 1
+                line = ""
+                For x = 0 To lines(i).Length - 1
+                    If Char.IsLetterOrDigit(lines(i).Substring(x, 1)) Then
+                        word = word & lines(i).Substring(x, 1)
+                    ElseIf x < lines(i).Length - 2 And (lines(i).Substring(x, 1) = "-" Or lines(i).Substring(x, 1) = "—") Then
+                        If Char.IsLetter(lines(i).Substring(x + 1, 1)) Then
+                            word = word & lines(i).Substring(x, 1)
+                        End If
+                    ElseIf lines(i).Substring(x, 1) = "'" Or lines(i).Substring(x, 1) = "’" Then
+                        word = word & lines(i).Substring(x, 1)
+                    Else
+                        CurrentCharacter = lines(i).Substring(x, 1)
+                        'adds number equivilant of the word and the character to a string
+                        WordChecker(word, wordbank, line)
+                        WordChecker(CurrentCharacter, wordbank, line)
+                        word = ""
+                    End If
+                Next
+                CurrentCharacter = ""
+                WordChecker(word, wordbank, line)
+                WordChecker(CurrentCharacter, wordbank, line)
+                'add compressed lines to array
+                word = ""
+                EncodedLines.Add(line)
+            Next
+        End Sub
+        Function NumberOfBytes(EncodedLines As List(Of String)) As Integer
+            Dim ByteCount As Integer = 0
+            For x = 0 To EncodedLines.Count - 1
+                ByteCount = ByteCount + EncodedLines(x).Length
+            Next
+            Return ByteCount
+        End Function
+        Public Sub CheckingWordExists(PreviouslyStoredWord As Boolean, ByRef wordbank As List(Of String), ByRef wordfrequencies As List(Of Integer), lines As List(Of String), word As String)
+            If word <> "" Then 'if the word isnt just empty
+                PreviouslyStoredWord = False
+                For x = 0 To wordbank.Count - 1 'looping through all of the current words stored
+                    If word = wordbank(x) Then 'if equal to a word then increase the count of that word by one
+                        PreviouslyStoredWord = True 'previously stored word is not set to true
+                        wordfrequencies(x) = wordfrequencies(x) + 1
+                    End If
+                Next
+                'if the word has not been stored already then set up a new word
+                If PreviouslyStoredWord = False Then
+                    wordbank.Add(word)
+                    wordfrequencies.Add(1)
+                End If
+            End If
+        End Sub
+        Public Sub DictionaryDataCompressionIntoTextFile(lines As List(Of String), ByRef wordbank As List(Of String), filepath As String, ByRef encodedlines As List(Of String), wordfrequencies As List(Of Integer))
+            Console.WriteLine("Input file path")
+            filepath = Console.ReadLine
+            CreateDirectoryAndFile(filepath, False)
+            If encodedlines.Count = 0 Then
+                CompressText(encodedlines, lines, wordbank, wordfrequencies)
+            End If
+            FileOpen(2, filepath, OpenMode.Output) 'opens the file
+            For x = 0 To encodedlines.Count - 1
+                'loops through all of the encoded lines And adds them to the text file
+                PrintLine(2, encodedlines(x))
+            Next
+            FileClose(2)
+            'removes all of the encoded lines from the array
+            StoringKey(wordbank, filepath)
+        End Sub
+        Public Sub ViewText(Outputlines As List(Of String))
+            'loops through each of the encodedlines and then outputs them
+            For x = 0 To Outputlines.Count - 1
+                Console.WriteLine(Outputlines(x))
+            Next
+        End Sub
+        Public Sub StoringKey(wordbank As List(Of String), userpath As String)
+            Dim filepath As String = "C:\CourseworkTesting/Dictionary.txt"
+            CreateDirectoryAndFile(filepath, False)
+            FileOpen(5, filepath, OpenMode.Output) 'opens the file
+            PrintLine(5, userpath)
+            For x = 0 To wordbank.Count - 1
+                'loops through all of the encoded lines and adds them to the text file
+                PrintLine(5, wordbank(x))
+            Next
+            FileClose(5)
+        End Sub
+        Sub WordChecker(word As String, wordbank As List(Of String), ByRef line As String)
+            If word <> "" Then 'if word is valid then
+                For x = 0 To wordbank.Count - 1 'looping through each word
+                    If wordbank(x) = word And ((x).ToString).Length <= word.Length Then
+                        line = line & x & " " 'adds corresponding number to the code
+                    ElseIf wordbank(x) = word And ((x).ToString).Length > word.Length Then
+                        line = line & word & " "
+                    End If
+                Next
+            End If
+        End Sub
+        Public Sub DictionaryDataCompressionKey(wordbank As List(Of String))
+            Console.WriteLine()
+            Console.WriteLine("Key")
+            Console.WriteLine()
+            'loops through each word in the wordbank
+            For x = 0 To wordbank.Count - 1
+                If ((x).ToString).Length > wordbank(x).Length Then
+                    Console.WriteLine(wordbank(x) & " " & wordbank(x))
+                Else
+                    Console.WriteLine(x & " " & wordbank(x))
+                End If
+            Next
+        End Sub
+        Public Sub FrequencyDistribution(wordbank As List(Of String), wordfrequencies As List(Of Integer))
+            For x = 0 To wordbank.Count - 1
+                Console.WriteLine(wordbank(x) & " " & wordfrequencies(x))
+            Next
+        End Sub
+        Public Sub DecompressText(encodedlines As List(Of String), wordbank As List(Of String), ByRef originallines As List(Of String))
+            Dim num As String = ""
+            Dim SingleLine As String = ""
+            For x = 0 To encodedlines.Count - 1 'looping through all of the encoded lines
+                For a = 0 To encodedlines(x).Length - 1 'looping through each character of the encoded line
+                    If Not (Char.IsDigit(encodedlines(x).Substring(a, 1))) And encodedlines(x).Substring(a, 1) <> " " Then
+                        Dim word As String = ""
+                        While Not (Char.IsDigit(encodedlines(x).Substring(a, 1))) And encodedlines(x).Substring(a, 1) <> " " And a < encodedlines(x).Length
+                            word = word & encodedlines(x).Substring(a, 1)
+                            a = a + 1
+                        End While
+                        For h = 0 To wordbank.Count - 1
+                            If word = wordbank(h) Then
+                                SingleLine = SingleLine & word
+                            End If
+                        Next
+                    ElseIf encodedlines(x).Substring(a, 1) = " " Then
+                        a = a + 1
+                    Else
+                        While encodedlines(x).Substring(a, 1) <> " " And a < encodedlines(x).Length
+                            num = num & encodedlines(x).Substring(a, 1) 'adds character to the string of numbers
+                            a = a + 1
+                        End While
+                        For i = 0 To wordbank.Count - 1
+                            If i = CInt(num) Then
+                                SingleLine = SingleLine & wordbank(i) 'adds the word to the line
+                            End If
+                        Next
+                        num = ""
+                    End If
+                Next
+                originallines.Add(SingleLine)
+                SingleLine = ""
+            Next
+        End Sub
+        Public Sub DictionaryDataCompressionUserInterface(dictionary As DictionaryDataCompression, ByRef doneonce As Boolean, ByRef lines As List(Of String), filepath As String)
+            Dim WordBank As New List(Of String) 'wordbank is only used in DictionaryDataCompression Class
+            Dim WordFrequencies As New List(Of Integer)
+            Dim encodedlines As New List(Of String)
+            Dim originallines As New List(Of String)
+            Dim stats As Boolean = False
+            Dim exitUI As Boolean = False
+            If doneonce = False Then 'ensures that the words are only collected once
+                CreateDirectoryAndFile("C:\CourseworkTesting/Dictionary.txt", False)
+                FileOpen(5, "C:\CourseworkTesting/Dictionary.txt", OpenMode.Input)
+                Dim RetreivedFilepath As String = ""
+                If Not EOF(5) Then 'if there is text in the text file
+                    RetreivedFilepath = LineInput(5)
+                End If
+                If RetreivedFilepath <> filepath Then 'if they are not decoding from the text file
+                    FileClose(5)
+                    GettingAllNewUniqueWords(WordBank, WordFrequencies, lines)
+                    quicksort(WordFrequencies, 0, WordBank.Count - 1, WordBank)
+                Else
+                    While Not EOF(5)
+                        WordBank.Add(LineInput(5)) 'adding the word to the file
+                        WordFrequencies.Add(0)
+                    End While
+                    FileClose(5)
+                    FileOpen(2, filepath, OpenMode.Input) 'opening the filepath of the text file which the user inputted
+                    While Not EOF(2)
+                        encodedlines.Add(LineInput(2))
+                    End While
+                    FileClose(2)
+                    DecompressText(encodedlines, WordBank, originallines)
+                    GettingAllNewUniqueWords(WordBank, WordFrequencies, originallines)
+                    originallines.Clear()
+                End If
+                doneonce = True
+            End If
+            Dim choice As String = ""
+            Do
+                Console.WriteLine()
+                choice = ""
+                While choice <> "1" And choice <> "2" And choice <> "3" And choice <> "4" And choice <> "5"
+                    Console.WriteLine("1:View the key")
+                    Console.WriteLine("2:View Compressed text")
+                    Console.WriteLine("3:View Decompressed Text")
+                    Console.WriteLine("4:View Frequency distribution")
+                    Console.WriteLine("5:Return to main menu")
+                    choice = Console.ReadLine
+                    Console.WriteLine()
+                End While
+                If choice = "1" Then
+                    DictionaryDataCompressionKey(WordBank)
+                ElseIf choice = "2" Then
+                    Console.WriteLine()
+                    If encodedlines.Count = 0 Then
+                        CompressText(encodedlines, lines, WordBank, WordFrequencies)
+                    End If
+                    ViewText(encodedlines)
+                    Dim ReturnBack As String = ""
+                    While ReturnBack <> "1" And ReturnBack <> "2"
+                        Console.WriteLine()
+                        Console.WriteLine("1:Save Compressed Text")
+                        Console.WriteLine("2:Return back")
+                        ReturnBack = Console.ReadLine
+                    End While
+                    If ReturnBack = "1" Then
+                        DictionaryDataCompressionIntoTextFile(lines, WordBank, "", encodedlines, WordFrequencies)
+                        Console.WriteLine("Completed")
+                        exitUI = True
+                    End If
+                ElseIf choice = "3" Then
+                    If encodedlines.Count = 0 Then
+                        CompressText(encodedlines, lines, WordBank, WordFrequencies)
+                    End If
+                    DecompressText(encodedlines, WordBank, originallines)
+                    ViewText(originallines)
+                    Dim Userinput As String = ""
+                    While Userinput <> "1" And Userinput <> "2"
+                        Console.WriteLine()
+                        Console.WriteLine()
+                        Console.WriteLine("1:Save decompressed text to text file")
+                        Console.WriteLine("2:Return to Dictionary data compression menu")
+                        Userinput = Console.ReadLine
+                        Console.WriteLine()
+                    End While
+                    If Userinput = "1" Then
+                        resavingToATextFile(Userinput, originallines)
+                        exitUI = True 'so user is sent back to the main menu
+                    End If
+                ElseIf choice = "4" Then
+                    FrequencyDistribution(WordBank, WordFrequencies)
+                End If
+                Console.WriteLine()
+            Loop Until choice = "5" Or exitUI = True
+            WordBank.Clear()
+            WordFrequencies.Clear()
+            encodedlines.Clear()
+        End Sub
+        end class
+        end module
